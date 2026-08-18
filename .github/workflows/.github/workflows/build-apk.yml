@@ -13,7 +13,7 @@ jobs:
 
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
 
       - name: Setup Java 17
         uses: actions/setup-java@v4
@@ -26,29 +26,25 @@ jobs:
         run: |
           set -e
 
-          echo "Searching for Android project ZIP..."
-
           ZIP_FILE=$(find . -maxdepth 2 -type f -iname "*.zip" | head -n 1)
 
           if [ -z "$ZIP_FILE" ]; then
-            echo "ERROR: Android project ZIP was not found."
+            echo "ERROR: Android project ZIP file was not found."
             exit 1
           fi
 
-          echo "ZIP found: $ZIP_FILE"
+          echo "Found ZIP: $ZIP_FILE"
 
           mkdir -p android-project
-
           unzip -q "$ZIP_FILE" -d android-project
 
-          echo "ZIP extracted successfully."
+          echo "Extracted project:"
+          find android-project -maxdepth 3 -type f | head -100
 
       - name: Find Gradle Project
         shell: bash
         run: |
           set -e
-
-          echo "Searching for gradlew..."
 
           GRADLEW=$(find android-project -type f -name "gradlew" | head -n 1)
 
@@ -60,35 +56,23 @@ jobs:
 
           PROJECT_DIR=$(dirname "$GRADLEW")
 
-          echo "Gradle project found:"
+          echo "Gradle project found at:"
           echo "$PROJECT_DIR"
 
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
       - name: Make Gradle Wrapper Executable
-        shell: bash
         run: |
           chmod +x "$PROJECT_DIR/gradlew"
 
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
-
       - name: Build Debug APK
-        shell: bash
+        working-directory: ${{ env.PROJECT_DIR }}
         run: |
-          set -e
-
-          cd "$PROJECT_DIR"
-
-          ./gradlew assembleDebug --no-daemon
+          ./gradlew assembleDebug --stacktrace
 
       - name: Find APK
         shell: bash
         run: |
-          set -e
-
-          echo "Searching for APK..."
-
           APK=$(find "$PROJECT_DIR" -type f -name "*.apk" | head -n 1)
 
           if [ -z "$APK" ]; then
@@ -99,13 +83,11 @@ jobs:
           echo "APK found:"
           echo "$APK"
 
-          mkdir -p apk-output
-
-          cp "$APK" apk-output/MDC-Serial-Debug.apk
+          echo "APK_PATH=$APK" >> "$GITHUB_ENV"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: MDC-Serial-APK
-          path: apk-output/MDC-Serial-Debug.apk
-          retention-days: 30
+          path: ${{ env.APK_PATH }}
+          if-no-files-found: error
